@@ -1,0 +1,244 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rest Smoking Sensor — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1f2733;--muted:#6b7683;--line:#e6e9ee;--accent:#1F3864;--good:#2E7D32;--bad:#C00000;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px}
+.wrap{max-width:1320px;margin:0 auto;padding:24px}
+h1{font-size:22px;margin:0 0 2px}
+.sub{color:var(--muted);margin-bottom:18px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+.tabs button{border:0;background:none;padding:10px 16px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--accent);font-weight:700;border-bottom-color:var(--accent)}
+.tab{display:none}.tab.on{display:block}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+.kpi .val{font-size:24px;font-weight:700;margin-top:4px}
+.controls{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.controls label{color:var(--muted);font-size:12px;margin-right:4px}
+.fld{display:flex;flex-direction:column;gap:4px}
+select,input[type=text],input[type=date]{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{padding:7px 14px;border:0;background:#fff;cursor:pointer;color:var(--muted);font:inherit}
+.seg button.on{background:var(--accent);color:#fff}
+.dd{position:relative;display:inline-block}
+.dd-btn{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;min-width:260px;text-align:left;font:inherit;display:inline-flex;justify-content:space-between;gap:10px;align-items:center}
+.dd-btn .car{color:var(--muted)}
+.dd-panel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.14);padding:8px;min-width:280px;max-height:300px;overflow:auto;display:none}
+.dd.open .dd-panel{display:block}
+.dd-tools{display:flex;gap:6px;margin-bottom:6px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.dd-tools button{flex:1;padding:5px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;font:inherit;color:var(--muted)}
+.dd-panel label{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:13px;cursor:pointer}
+.dd-panel label:hover{background:#f2f4f7}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table{border-collapse:collapse;width:100%}
+th,td{padding:8px 10px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+thead th{position:sticky;top:0;background:#111;border-bottom:1px solid #000;font-size:14px;color:#fff;font-weight:700}
+thead th.month,thead th.srt{cursor:pointer;user-select:none}
+thead th.month:hover,thead th.srt:hover{color:#9fb6da}
+thead th .arrow{font-size:10px;opacity:.85}
+th.h,td.h{text-align:left;position:sticky;left:0;z-index:1}
+thead th.h{background:#111}
+tbody td.h{background:#fff}
+tbody tr{border-bottom:1px solid var(--line)}
+tbody tr:nth-child(even) td.h{background:#fafbfc}
+.name{font-style:italic}
+tfoot td{font-weight:700;border-top:2px solid #cfd5dd;background:#f2f4f7}
+.tot{border-left:2px solid #444}
+.rt{text-align:right}
+.bad{color:var(--bad);font-weight:700}
+.legend{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;margin:10px 2px}
+.bar{height:10px;width:150px;border-radius:6px}
+.sw{width:14px;height:12px;border-radius:3px;display:inline-block;vertical-align:middle}
+.cell{display:block;padding:3px 6px;border-radius:4px}
+.muted{color:var(--muted)}
+.chartsgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chartbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.chartbox h3{margin:0 0 8px;font-size:14px}
+@media(max-width:900px){.chartsgrid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+</style></head><body><div class="wrap">
+<h1>Rest Smoking Sensor Analytics</h1>
+<div class="sub">as of <b id="asof"></b></div>
+<div class="tabs">
+  <button data-t="fin" class="on">Portfolio Dashboard</button>
+  <button data-t="dash">Monthly Indicators</button>
+  <button data-t="trend">Trends</button>
+</div>
+
+<section class="tab" id="tab-dash">
+  <div class="kpis" id="kpis"></div>
+  <div class="controls">
+    <span class="seg" id="seg"><button data-m="inc" class="on">Incident Rate</button><button data-m="chg">Charge Rate</button></span>
+    <span><label>Management</label><select id="fMgmt"><option value="">All</option></select></span>
+    <span><label>Model</label><select id="fModel"><option value="">All</option><option>Capex</option><option>Financed</option></select></span>
+    <span class="muted" id="rowcount"></span>
+  </div>
+  <div class="card"><div style="overflow:auto;max-height:70vh"><table id="tbl"></table></div></div>
+  <div class="legend" id="legend"></div>
+  <div class="sub" style="margin-top:10px">Each month shows the <b>cumulative</b> rate through that month (running total since go-live), so the last month equals Since Inception. Red = below target (Incident &lt; 0.60% / Charge &lt; 75%); above target shades yellow→green. Blank = not live yet. Click a column header to sort.</div>
+</section>
+
+<section class="tab" id="tab-trend">
+  <div class="controls">
+    <span class="fld"><label>Level</label><select id="tLevel"><option>Portfolio</option><option>Management Company</option><option>Model</option><option>Hotel</option></select></span>
+    <span class="fld" id="tPickWrap"><label>Show (one line each)</label>
+      <span class="dd" id="dd"><button class="dd-btn" id="ddBtn"><span id="ddLabel">All</span><span class="car">▾</span></button>
+        <div class="dd-panel" id="ddPanel"><div class="dd-tools"><button id="pAll">Select all</button><button id="pNone">Clear</button></div><div id="tPick"></div></div></span>
+    </span>
+  </div>
+  <div class="chartsgrid">
+    <div class="chartbox"><h3>Incident Rate by Month</h3><canvas id="cInc" height="160"></canvas></div>
+    <div class="chartbox"><h3>Charge Rate by Month</h3><canvas id="cChg" height="160"></canvas></div>
+  </div>
+  <div class="sub" style="margin-top:10px">Each selected item is its own line. Dashed gray line marks the target.</div>
+</section>
+
+<section class="tab on" id="tab-fin">
+  <div class="controls">
+    <span class="fld"><label>Management</label><select id="fnMgmt"><option value="">All</option></select></span>
+    <span class="fld"><label>Hotel</label><select id="fnHotel"><option value="">All</option></select></span>
+    <span class="fld"><label>Start date</label><input type="date" id="fnStart"></span>
+    <span class="fld"><label>End date</label><input type="date" id="fnEnd"></span>
+    <span class="muted" id="fnMsg"></span>
+  </div>
+  <div class="card"><div style="overflow:auto;max-height:72vh"><table id="fnTbl"></table></div></div>
+  <div class="sub" style="margin-top:10px">Metrics cover the selected <b>Start–End</b> window (intersected with each hotel's live period). Revenue &amp; incidents are exact to the day; <b>Expense</b> is month-based (prorated) because the platform exposes rest cost only as a running total. Red = Charge &lt; 75% / Incident &lt; 0.60% / negative Profit.</div>
+</section>
+</div>
+<script>
+const DATA=__DATA__, FIN=__FIN__;
+const MONTHS=DATA.months, MLBL=DATA.mlbl;
+const THR={inc:0.006, chg:0.75};
+const fmt={inc:v=>v==null?"":(v*100).toFixed(2)+"%", chg:v=>v==null?"":(v*100).toFixed(1)+"%"};
+document.getElementById("asof").textContent=DATA.asof;
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  document.querySelectorAll(".tab").forEach(s=>s.classList.remove("on"));
+  document.getElementById("tab-"+b.dataset.t).classList.add("on");
+  if(b.dataset.t==="trend") drawTrends();
+});
+function lerp(a,b,t){return a.map((x,i)=>Math.round(x+(b[i]-x)*t))}
+const YEL=[255,235,132],GRN=[99,190,123],RED=[248,105,107];
+function cumThru(h,i){let bil=0,chg=0,kd=0;for(let k=0;k<=i;k++){const m=h.months[MONTHS[k]];if(m.kd!=null){bil+=m.bil;chg+=m.chgd;kd+=m.kd;}}return{inc:kd>0?bil/kd:null,chg:bil>0?chg/bil:null,bil,chgd:chg,kd};}
+const maxV={inc:0,chg:0};
+DATA.hotels.forEach(h=>MONTHS.forEach((m,i)=>{const cv=cumThru(h,i);["inc","chg"].forEach(k=>{if(cv[k]!=null&&cv[k]>maxV[k])maxV[k]=cv[k];});}));
+function cellColor(metric,v){if(v==null)return null;if(v<THR[metric])return `rgb(${RED[0]},${RED[1]},${RED[2]})`;let t=(v-THR[metric])/((maxV[metric]-THR[metric])||1);t=Math.max(0,Math.min(1,t));let c=lerp(YEL,GRN,t);return `rgb(${c[0]},${c[1]},${c[2]})`;}
+function inception(h){let sb=0,sc=0,skd=0;MONTHS.forEach(ym=>{const m=h.months[ym];if(m.kd!=null){sb+=m.bil;sc+=m.chgd;skd+=m.kd;}});return{inc:skd>0?sb/skd:null,chg:sb>0?sc/sb:null,bil:sb,chgd:sc,kd:skd};}
+
+// ---- Monthly Indicators (heatmap) ----
+let metric="inc",sortCol=-1,sortDir=-1;
+const kpisEl=document.getElementById("kpis"),fMgmt=document.getElementById("fMgmt"),fModel=document.getElementById("fModel");
+[...new Set(DATA.hotels.map(h=>h.mgmt).filter(Boolean))].sort().forEach(x=>{let o=document.createElement("option");o.value=x;o.textContent=x;fMgmt.appendChild(o)});
+function kpis(){let below=0,above=0,n=DATA.hotels.length,sb=0,sc=0,skd=0;
+  DATA.hotels.forEach(h=>{const x=inception(h);if(x.chg!=null&&x.chg<0.75)below++;if(x.inc!=null&&x.inc<0.006)above++;sb+=x.bil;sc+=x.chgd;skd+=x.kd;});
+  const pchg=sb?sc/sb:0,pinc=skd?sb/skd:0;
+  const cards=[["Hotels tracked",n,""],["Charge rate (overall)",(pchg*100).toFixed(1)+"%",pchg<0.75?"bad":"good"],
+    ["Incident rate (overall)",(pinc*100).toFixed(2)+"%",pinc<0.006?"bad":"good"],
+    ["Hotels < 75% charge",below,below?"bad":"good"],["Hotels < 0.60% incident",above,above?"bad":"good"]];
+  kpisEl.innerHTML=cards.map(c=>`<div class="kpi"><div class="lbl">${c[0]}</div><div class="val" style="color:${c[2]==='bad'?'var(--bad)':c[2]==='good'?'var(--good)':'var(--ink)'}">${c[1]}</div></div>`).join("");}
+function render(){const mg=fMgmt.value,md=fModel.value;let rows=DATA.hotels.filter(h=>(!mg||h.mgmt===mg)&&(!md||h.model===md)).slice();
+  document.getElementById("rowcount").textContent=rows.length+" of "+DATA.hotels.length+" hotels";
+  const getv=(h)=> sortCol==="T"? inception(h)[metric] : cumThru(h,sortCol)[metric];
+  if(sortCol===-1)rows.sort((a,b)=>a.name.localeCompare(b.name));
+  else rows.sort((a,b)=>{let va=getv(a),vb=getv(b);if(va==null&&vb==null)return 0;if(va==null)return 1;if(vb==null)return -1;return sortDir*(vb-va);});
+  const arrow=x=>sortCol===x?(sortDir<0?" ▼":" ▲"):"";
+  let thead=`<thead><tr><th class="h" data-c="-1">Hotel</th><th>Mgmt</th><th>Model</th>`+MONTHS.map((m,i)=>`<th class="month" data-c="${i}">${MLBL[m]}<span class="arrow">${arrow(i)}</span></th>`).join("")+`<th class="month tot" data-c="T">Since<br>Inception<span class="arrow">${arrow('T')}</span></th></tr></thead>`;
+  let body=rows.map(h=>{let tds=MONTHS.map((ym,i)=>{let v=cumThru(h,i)[metric];if(v==null)return `<td class="muted">·</td>`;return `<td><span class="cell" style="background:${cellColor(metric,v)}">${fmt[metric](v)}</span></td>`;}).join("");
+    let tv=inception(h)[metric];let tcell=tv==null?`<td class="tot muted">·</td>`:`<td class="tot"><span class="cell" style="background:${cellColor(metric,tv)}">${fmt[metric](tv)}</span></td>`;
+    return `<tr><td class="h name">${h.name}</td><td class="muted">${h.mgmt}</td><td class="muted">${h.model}</td>${tds}${tcell}</tr>`;}).join("");
+  let mfoot=MONTHS.map((ym,i)=>{let sb=0,sc=0,skd=0;rows.forEach(h=>{const cv=cumThru(h,i);if(cv.kd>0){sb+=cv.bil;sc+=cv.chgd;skd+=cv.kd;}});let val=metric==="inc"?(skd>0?sb/skd:null):(sb>0?sc/sb:null);return `<td>${val==null?"":fmt[metric](val)}</td>`;}).join("");
+  let tsb=0,tsc=0,tskd=0;rows.forEach(h=>{const x=inception(h);tsb+=x.bil;tsc+=x.chgd;tskd+=x.kd;});let tval=metric==="inc"?(tskd>0?tsb/tskd:null):(tsb>0?tsc/tsb:null);
+  let foot=`<tfoot><tr><td class="h">Portfolio${(mg||md)?" (filtered)":""}</td><td></td><td></td>${mfoot}<td class="tot">${tval==null?"":fmt[metric](tval)}</td></tr></tfoot>`;
+  const t=document.getElementById("tbl");t.innerHTML=thead+`<tbody>${body}</tbody>`+foot;
+  t.querySelectorAll("thead th.month").forEach(th=>th.onclick=()=>{let c=th.dataset.c;c=(c==="T")?"T":+c;if(sortCol===c)sortDir*=-1;else{sortCol=c;sortDir=-1;}render();});
+  t.querySelector('thead th[data-c="-1"]').onclick=()=>{sortCol=-1;render();};
+  document.getElementById("legend").innerHTML=`<span class="sw" style="background:rgb(248,105,107)"></span><span>Below target</span>&nbsp;&nbsp;<span>Above target</span><span class="bar" style="background:linear-gradient(90deg,rgb(255,235,132),rgb(99,190,123))"></span><span>${metric==="inc"?"0.60% → "+(maxV.inc*100).toFixed(2)+"%":"75% → "+(maxV.chg*100).toFixed(0)+"%"}</span>`;}
+document.querySelectorAll("#seg button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#seg button").forEach(x=>x.classList.remove("on"));b.classList.add("on");metric=b.dataset.m;render();});
+fMgmt.onchange=render;fModel.onchange=render;
+
+// ---- trends ----
+const PALETTE=["#1F3864","#C00000","#2E7D32","#B7791F","#6B21A8","#0E7490","#9D174D","#4D7C0F","#B45309","#1D4ED8","#BE185D","#0F766E","#7C3AED","#DC2626","#059669","#92400E"];
+const tLevel=document.getElementById("tLevel"),tPick=document.getElementById("tPick"),tPickWrap=document.getElementById("tPickWrap");
+const dd=document.getElementById("dd"),ddBtn=document.getElementById("ddBtn"),ddLabel=document.getElementById("ddLabel");
+function agg(fn){return MONTHS.map(ym=>{let sb=0,sc=0,skd=0;DATA.hotels.forEach(h=>{if(!fn(h))return;const m=h.months[ym];if(m.kd!=null){sb+=m.bil;sc+=m.chgd;skd+=m.kd;}});return{inc:skd>0?sb/skd:null,chg:sb>0?sc/sb:null};});}
+function optionsFor(lv){if(lv==="Portfolio")return["Portfolio"];if(lv==="Management Company")return[...new Set(DATA.hotels.map(h=>h.mgmt).filter(Boolean))].sort();if(lv==="Model")return["Capex","Financed"];return DATA.hotels.map(h=>h.name).sort();}
+function aggFor(lv,name){if(lv==="Portfolio")return agg(()=>true);if(lv==="Management Company")return agg(h=>h.mgmt===name);if(lv==="Model")return agg(h=>h.model===name);return agg(h=>h.name===name);}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
+function selectedT(){const lv=tLevel.value;if(lv==="Portfolio")return["Portfolio"];return[...tPick.querySelectorAll("input:checked")].map(cb=>cb.value);}
+function updateLabel(){const lv=tLevel.value;if(lv==="Portfolio"){ddLabel.textContent="Portfolio";return;}const all=tPick.querySelectorAll("input"),sel=[...all].filter(cb=>cb.checked);
+  if(sel.length===0)ddLabel.textContent="None selected";else if(sel.length===all.length)ddLabel.textContent="All ("+all.length+")";else if(sel.length===1)ddLabel.textContent=sel[0].value;else ddLabel.textContent=sel.length+" selected";}
+function fillPick(){const lv=tLevel.value,opts=optionsFor(lv);if(lv==="Portfolio"){tPickWrap.style.display="none";return;} tPickWrap.style.display="";
+  let def=new Set(opts);tPick.innerHTML=opts.map(o=>`<label><input type="checkbox" value="${esc(o)}" ${def.has(o)?"checked":""}>${o}</label>`).join("");
+  tPick.querySelectorAll("input").forEach(cb=>cb.onchange=()=>{updateLabel();drawTrends();});updateLabel();}
+ddBtn.onclick=(e)=>{e.stopPropagation();dd.classList.toggle("open");};
+document.addEventListener("click",(e)=>{if(!dd.contains(e.target))dd.classList.remove("open");});
+document.getElementById("pAll").onclick=()=>{tPick.querySelectorAll("input").forEach(cb=>cb.checked=true);updateLabel();drawTrends();};
+document.getElementById("pNone").onclick=()=>{tPick.querySelectorAll("input").forEach(cb=>cb.checked=false);updateLabel();drawTrends();};
+let cInc,cChg;
+function mkChart(id,datasets,fmtFn,showLegend){return new Chart(document.getElementById(id),{type:"line",data:{labels:MONTHS.map(m=>MLBL[m]),datasets},
+  options:{responsive:true,interaction:{mode:"nearest",intersect:false},plugins:{legend:{display:showLegend,position:"bottom",labels:{boxWidth:12,font:{size:11},filter:it=>it.text!=="Target"}},tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":fmtFn(c.parsed.y))}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>fmtFn(v)}}}}});}
+function drawTrends(){const lv=tLevel.value,items=selectedT();const incDs=[],chgDs=[];
+  items.forEach((nm,i)=>{const s=aggFor(lv,nm),col=PALETTE[i%PALETTE.length];
+    incDs.push({label:nm,data:s.map(x=>x.inc),borderColor:col,backgroundColor:col+"22",fill:false,tension:.25,spanGaps:true,pointRadius:2,borderWidth:2});
+    chgDs.push({label:nm,data:s.map(x=>x.chg),borderColor:col,backgroundColor:col+"22",fill:false,tension:.25,spanGaps:true,pointRadius:2,borderWidth:2});});
+  const tgt=v=>({label:"Target",data:MONTHS.map(()=>v),borderColor:"#94a3b8",borderDash:[5,4],borderWidth:1,pointRadius:0,fill:false});
+  const showLeg=items.length<=12 && lv!=="Portfolio";
+  if(cInc)cInc.destroy();if(cChg)cChg.destroy();
+  cInc=mkChart("cInc",incDs.concat([tgt(THR.inc)]),v=>(v*100).toFixed(2)+"%",showLeg);
+  cChg=mkChart("cChg",chgDs.concat([tgt(THR.chg)]),v=>(v*100).toFixed(1)+"%",showLeg);}
+tLevel.onchange=()=>{fillPick();drawTrends();};
+
+// ---- Portfolio Dashboard (windowed financials) ----
+const fnMgmt=document.getElementById("fnMgmt"),fnHotel=document.getElementById("fnHotel"),fnStart=document.getElementById("fnStart"),fnEnd=document.getElementById("fnEnd"),fnMsg=document.getElementById("fnMsg");
+[...new Set(FIN.hotels.map(h=>h.mgmt).filter(Boolean))].sort().forEach(x=>{let o=document.createElement("option");o.value=x;o.textContent=x;fnMgmt.appendChild(o)});
+function fillHotelSel(){const mg=fnMgmt.value,cur=fnHotel.value;fnHotel.innerHTML='<option value="">All</option>'+FIN.hotels.filter(h=>!mg||h.mgmt===mg).map(h=>h.name).sort().map(n=>`<option${n===cur?" selected":""}>${n}</option>`).join("");}
+function diM(y,m){return new Date(y,m,0).getDate();}
+function toMDY(iso){const [y,m,d]=iso.split("-");return m+"/"+d+"/"+y;}
+fnStart.min="2026-02-01";fnStart.max=FIN.asof;fnEnd.min="2026-02-01";fnEnd.max=FIN.asof;
+fnStart.value="2026-02-01";fnEnd.value=FIN.asof;
+let fnSort="name",fnDir=1;
+function calcWin(h,sISO,eISO){
+  const start=new Date(sISO),end=new Date(eISO),gl=new Date(h.golive),mx=new Date(FIN.asof);
+  const effS=new Date(Math.max(start,gl)),effE=new Date(Math.min(end,mx));
+  const days=effE>=effS?Math.round((effE-effS)/86400000)+1:0;
+  let b=0,c=0,rev=0;for(const [d,bb,cc,nn] of h.daily){if(d>=sISO&&d<=eISO){b+=bb;c+=cc;rev+=nn;}}
+  let exp=0;FIN.months.forEach((ym,i)=>{const [my,mm]=ym.split("-").map(Number);const mS=new Date(my,mm-1,1),mE=new Date(my,mm,0);
+    const os=Math.max(mS,start),oe=Math.min(mE,effE);const ov=oe>=os?Math.round((oe-os)/86400000)+1:0;if(ov>0)exp+=h.rest[i]*(ov/diM(my,mm));});
+  return {b,c,rev,exp,days,inc:days?b/(h.keys*days):null,chg:b?c/b:null,revpar:days?rev/(h.keys*days):null,profit:rev-exp,live:days>0};
+}
+const money=v=>(v<0?"-$":"$")+Math.abs(Math.round(v)).toLocaleString();
+const p0=v=>v==null?"—":(v*100).toFixed(0)+"%";
+const p1=v=>v==null?"—":(v*100).toFixed(1)+"%";
+const p2=v=>v==null?"—":(v*100).toFixed(2)+"%";
+const rp=v=>"$"+(v||0).toFixed(2);
+const COLS=[["chg","Charge Rate"],["inc","Incident / Av Room"],["rev","Revenue"],["exp","Expense"],["profit","Profit"],["b","Total Incidents"],["c","Charged Incidents"],["revpar","RevPAR"]];
+function renderFin(){
+  let s=fnStart.value,e=fnEnd.value;
+  if(!s||!e){fnMsg.textContent="Pick a start and end date";fnMsg.style.color="var(--bad)";return;}
+  if(s>e){fnMsg.textContent="Start date must be on or before end date";fnMsg.style.color="var(--bad)";return;}
+  const mg=fnMgmt.value,hn=fnHotel.value;
+  let rows=FIN.hotels.filter(h=>(!mg||h.mgmt===mg)&&(!hn||h.name===hn)).map(h=>({h,d:calcWin(h,s,e)})).filter(r=>r.d.live);
+  const cmp=(a,b)=>{if(fnSort==="name")return fnDir*a.h.name.localeCompare(b.h.name);
+    if(fnSort==="start")return fnDir*((new Date(b.h.golive))-(new Date(a.h.golive)));
+    let x=a.d[fnSort],y=b.d[fnSort];if(x==null)x=-Infinity;if(y==null)y=-Infinity;return fnDir*(y-x);};
+  rows.sort(cmp);
+  const arr=k=>fnSort===k?(fnDir<0?" ▼":" ▲"):"";
+  let thead=`<thead><tr><th class="h srt" data-k="name">Hotel${arr("name")}</th><th>Mgmt</th><th>Model</th><th class="srt" data-k="start">Start Date${arr("start")}</th>`+COLS.map(c=>`<th class="srt rt" data-k="${c[0]}">${c[1]}${arr(c[0])}</th>`).join("")+`</tr></thead>`;
+  function cellFor(d){const cB=d.chg!=null&&d.chg<0.75,iB=d.inc!=null&&d.inc<0.006,pB=d.profit<0;
+    return `<td class="rt ${cB?'bad':''}">${p1(d.chg)}</td><td class="rt ${iB?'bad':''}">${p2(d.inc)}</td>`+
+      `<td class="rt">${money(d.rev)}</td><td class="rt">${money(d.exp)}</td><td class="rt ${pB?'bad':''}">${money(d.profit)}</td>`+
+      `<td class="rt">${d.b.toLocaleString()}</td><td class="rt">${d.c.toLocaleString()}</td><td class="rt">${rp(d.revpar)}</td>`;}
+  let body=rows.map(r=>`<tr><td class="h name">${r.h.name}</td><td class="muted">${r.h.mgmt}</td><td class="muted">${r.h.model}</td><td>${toMDY(r.h.golive)}</td>${cellFor(r.d)}</tr>`).join("");
+  let T={b:0,c:0,rev:0,exp:0,kd:0};rows.forEach(r=>{T.b+=r.d.b;T.c+=r.d.c;T.rev+=r.d.rev;T.exp+=r.d.exp;T.kd+=r.h.keys*r.d.days;});
+  const tD={b:T.b,c:T.c,rev:T.rev,exp:T.exp,profit:T.rev-T.exp,inc:T.kd?T.b/T.kd:null,chg:T.b?T.c/T.b:null,revpar:T.kd?T.rev/T.kd:null};
+  let foot=`<tfoot><tr><td class="h">Portfolio${(mg||hn)?" (filtered)":""}</td><td></td><td></td><td></td>${cellFor(tD)}</tr></tfoot>`;
+  const t=document.getElementById("fnTbl");t.innerHTML=thead+`<tbody>${body}</tbody>`+foot;
+  t.querySelectorAll("thead th.srt").forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(fnSort===k)fnDir*=-1;else{fnSort=k;fnDir=(k==="name"||k==="start")?1:-1;}renderFin();});
+  fnMsg.textContent=rows.length+" hotels · "+toMDY(s)+" → "+toMDY(e);fnMsg.style.color="var(--muted)";
+}
+fnMgmt.onchange=()=>{fillHotelSel();renderFin();};fnHotel.onchange=renderFin;fnStart.onchange=renderFin;fnEnd.onchange=renderFin;
+
+kpis();render();fillPick();fillHotelSel();renderFin();
+</script></body></html>
