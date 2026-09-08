@@ -21,13 +21,16 @@ This skill has **two modes**. Decide which one you are in BEFORE doing anything 
 
 | | **Mode A - Daily data refresh** | **Mode B - Weekly report** |
 |---|---|---|
-| Purpose | Keep the hosted extranet dashboard current | Produce the paste-ready email |
-| Steps to run | Step 1, then **Step 6b only** | Step 1, Steps 2-6, Step 7 |
-| Touches Supabase | **Yes** (overwrites the two rest tables) | **No** |
+| Purpose | Keep the hosted extranet dashboard current | Produce the paste-ready email **and** leave the dashboard current |
+| Steps to run | Step 1, then **Step 6b only** | Step 1, health check, **Step 6b**, then Steps 2-6, Step 7 |
+| Touches Supabase | **Yes** (overwrites `rest_monthly`) | **Yes** - it runs Mode A as part of the run |
 | Produces files | **None** | **`Rest<M-D>.docx` only** |
 | Prompts the user | **No** (see Mode A rules) | Yes (see the input list below) |
 
-**Mode A is the automated one.** It must be able to run unattended, so it never asks questions.
+**The relationship runs one way: Mode B includes Mode A. Mode A never runs Mode B.** The nightly
+job must stay data-only - it must never generate documents.
+
+**Mode A is the automated one.** It must be able to run unattended, so it never asks questions, and it must never produce documents.
 **Mode B produces the Word document only** - `Email.xlsx` is still built, but purely as an
 intermediate needed to render the table picture embedded in the Word doc. Do not present it.
 
@@ -48,6 +51,22 @@ intermediate needed to render the table picture embedded in the Word doc. Do not
    your closing message and do NOT call the run a clean success.
 4. **If auth fails, stop and report.** Do not partially load. A failed token means no refresh
    happened; say so rather than reporting success.
+
+### Mode B order of operations
+
+1. **Step 1** - connect and verify auth.
+2. **Health check** (below) - report what it surfaces before asking for anything.
+3. **Step 6b - the Mode A refresh.** Do this BEFORE building the report, for two reasons: if the
+   session is going to fail it fails early, and the dashboard ends up current even if the document
+   build later goes wrong.
+4. **Steps 2-6** - the report pulls, the Excel intermediate, the table picture, the Word doc.
+5. **Step 7** - deliver the Word doc and report the refresh result.
+
+**The embedded refresh always uses as-of = TODAY, regardless of the report date the user gave.**
+This matters: someone running a back-dated weekly report ("rest as of 9/6") must not rewind the
+live dashboard to an older as-of and throw away newer data. The report and the dashboard are
+allowed to sit on different dates. If the report's as-of is not today, say so plainly in the
+closing message so nobody reads the difference as a bug.
 
 ### Mode B opens with a HEALTH CHECK (before prompting for anything)
 The nightly Mode A run reports into a session nobody reads at midnight, so the weekly run is
@@ -314,7 +333,10 @@ from public.rest_monthly;
 ## Step 7 — Deliver
 
 **Mode B (weekly report):** surface **`Rest<M-D>.docx`** as a clickable card in the chat via
-`present_files`. That is the only deliverable. `Email.xlsx` is an intermediate used to render the
+`present_files`. That is the only deliverable. Then also report the embedded Mode A refresh: the
+as-of date loaded, the billable / charged / collected totals, and any skipped hotels - and if the
+report's as-of differs from the refresh's as-of, state both so the difference is not read as an
+error. `Email.xlsx` is an intermediate used to render the
 embedded table picture - do NOT present it; the user exports the spreadsheet themselves from the
 dashboard's Export to Excel button. Do not finish a Mode B run without presenting the Word doc.
 

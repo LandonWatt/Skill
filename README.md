@@ -11,9 +11,14 @@ Two modes, one skill.
 in Supabase, which is what the hosted dashboard reads. No documents, never prompts. Runs on a
 9:02am scheduled task. Data refreshes need no redeploy — the page reads Supabase live.
 
-**Mode B — weekly report.** Produces `Rest<M-D>.docx` only. Opens with a health check that
-reports how stale the data is, any hotel the next load would skip, and any attribute edit that
-has not reached the dashboard yet.
+**Mode B — weekly report.** Produces `Rest<M-D>.docx` only, and **also runs Mode A**, so the
+weekly run always leaves the dashboard current. Opens with a health check that reports how stale
+the data is, any hotel the next load would skip, and any attribute edit that has not reached the
+dashboard yet.
+
+The relationship runs one way: Mode B includes Mode A; Mode A never runs Mode B, because the
+nightly job must stay data-only. The embedded refresh always uses **as-of = today** even when the
+report itself is back-dated, so a back-dated report can never rewind the live dashboard.
 
 ### Where the pieces live
 
