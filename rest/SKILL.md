@@ -114,13 +114,15 @@ where d.hotel_id is null or d.num_keys is null
 -- 3. Attribute edits that have NOT reached the dashboard yet
 select m.rest_name, m.model as showing_model, r.model as should_be_model,
        m.mgmt_company as showing_mgmt, d.management_company as should_be_mgmt,
+       m.asset_manager as showing_am, d.asset_manager as should_be_am,
        m.num_keys as showing_keys, d.num_keys as should_be_keys
-from (select distinct hotel_id, rest_name, num_keys, go_live, mgmt_company, model
+from (select distinct hotel_id, rest_name, num_keys, go_live, mgmt_company, asset_manager, model
         from public.rest_monthly) m
 join public.rest_hotels r on r.hotel_id = m.hotel_id
 join public.dim_hotel  d on d.hotel_id = m.hotel_id
 where m.model is distinct from r.model
    or m.mgmt_company is distinct from d.management_company
+   or m.asset_manager is distinct from d.asset_manager
    or m.num_keys is distinct from d.num_keys
    or m.rest_name is distinct from r.rest_name;
 ```
@@ -138,7 +140,7 @@ push it through immediately with this (attribute columns only, never the measure
 ```sql
 update public.rest_monthly m
 set rest_name=r.rest_name, num_keys=d.num_keys, go_live=r.go_live,
-    mgmt_company=d.management_company, model=r.model
+    mgmt_company=d.management_company, asset_manager=d.asset_manager, model=r.model
 from public.rest_hotels r
 join public.dim_hotel d on d.hotel_id = r.hotel_id
 where m.hotel_id = r.hotel_id
@@ -146,6 +148,7 @@ where m.hotel_id = r.hotel_id
     or m.num_keys is distinct from d.num_keys
     or m.go_live is distinct from r.go_live
     or m.mgmt_company is distinct from d.management_company
+    or m.asset_manager is distinct from d.asset_manager
     or m.model is distinct from r.model);
 ```
 
@@ -273,12 +276,12 @@ Save the lines between `@@DLY@@`/`@@E@@` to `daily.txt`. **Verify:** `TB` (billa
 
 **First, export the hotel reference from Supabase.** Two sources, joined at LOAD time only:
 `public.rest_hotels` holds the Rest-specific facts (`rest_name`, `go_live`, `model`) and
-`public.dim_hotel` supplies the shared ones (`num_keys`, `management_company`) so they are never
-duplicated and can never drift. Run this through the Supabase MCP `execute_sql` (project
+`public.dim_hotel` supplies the shared ones (`num_keys`, `management_company`, `asset_manager`)
+so they are never duplicated and can never drift. Run this through the Supabase MCP `execute_sql` (project
 `gfsusmsstpjqwrvcxjzt`) and save the JSON array it returns to `rest_hotels.json`:
 ```sql
 select r.hotel_id, r.rest_name, d.num_keys, r.go_live,
-       d.management_company as mgmt_company, r.model
+       d.management_company as mgmt_company, d.asset_manager, r.model
 from public.rest_hotels r
 left join public.dim_hotel d on d.hotel_id = r.hotel_id
 order by r.rest_name;

@@ -22,8 +22,8 @@ Design notes:
   * rest_cost comes from monthly.txt (the metrics endpoint).
   * Hotel attributes arrive as a JSON export the caller builds by joining public.rest_hotels
     (rest_name / go_live / model - the Rest-specific facts) to public.dim_hotel (num_keys /
-    management_company - the shared ones). Keys and management company are deliberately NOT
-    duplicated in rest_hotels; the local copy had already drifted from dim_hotel once.
+    management_company / asset_manager - the shared ones). The shared facts are deliberately
+    NOT duplicated in rest_hotels; the local copy had already drifted from dim_hotel once.
   * Hotel attributes + the as-of date are denormalized onto every row (no dim/meta join).
 """
 import sys
@@ -52,6 +52,9 @@ for r in raw:
         "keys": int(r["num_keys"]),
         "golive": str(r["go_live"])[:10],
         "mgmt": r.get("mgmt_company") or "",
+        # Filter dimension only - a missing one is a blank in a dropdown, not a broken
+        # denominator, so it is reported below rather than refused.
+        "am": (r.get("asset_manager") or "").strip(),
         "model": r.get("model") or None,
     }
 if unresolved:
@@ -70,6 +73,7 @@ def attrs(nm):
     r = ref[nm]
     md = r["model"]
     return (r["hotel_id"], esc(nm), r["keys"], r["golive"], esc(r["mgmt"]),
+            ("'%s'" % esc(r["am"])) if r["am"] else "NULL",
             ("'%s'" % esc(md)) if md else "NULL")
 
 
@@ -128,17 +132,17 @@ for key in restc:  # keep cost-only months (hotel live, zero events)
     monthset.add(key)
 
 COLS_M = ("(hotel_id,month,billable,charged,net_charges,rest_cost,rest_name,"
-          "num_keys,go_live,mgmt_company,model,as_of,refreshed_at)")
+          "num_keys,go_live,mgmt_company,asset_manager,model,as_of,refreshed_at)")
 
 mvals = []
 for (nm, ym) in sorted(monthset, key=lambda x: (ref[x[0]]["hotel_id"], x[1])):
-    hid, name, keys, gl, mg, md = attrs(nm)
+    hid, name, keys, gl, mg, am, md = attrs(nm)
     b, c, net = magg.get((nm, ym), [0, 0, 0.0])
     rest = restc.get((nm, ym), 0.0)
     if not (b or c or net or rest):
         continue
-    mvals.append("(%d,'%s-01',%d,%d,%s,%s,'%s',%d,'%s','%s',%s,'%s',now())"
-                 % (hid, ym, b, c, round(net, 2), round(rest, 2), name, keys, gl, mg, md, asof))
+    mvals.append("(%d,'%s-01',%d,%d,%s,%s,'%s',%d,'%s','%s',%s,%s,'%s',now())"
+                 % (hid, ym, b, c, round(net, 2), round(rest, 2), name, keys, gl, mg, am, md, asof))
 
 if not mvals:
     sys.exit("ERROR: no monthly rows generated - refusing to write a DELETE with no INSERT.")
@@ -156,6 +160,12 @@ with open(out, "w", encoding="utf-8", newline="") as f:
 print("wrote %s | monthly %d rows | TB=%d TC=%d (must match the Metrics endpoint)"
       % (out, len(mvals), tb, tc))
 print("hotels in reference: %d | hotels seen in pull: %d" % (len(ref), len(seen_names)))
+no_am = sorted(nm for nm, r in ref.items() if not r["am"])
+if no_am:
+    print("\nNOTE: %d hotel(s) have no asset manager in dim_hotel - they will show blank in the"
+          " dashboard's Asset Manager filter:" % len(no_am))
+    for nm in no_am:
+        print("    - %s" % nm)
 if skipped:
     print("\n*** %d HOTEL(S) SKIPPED - NOT IN public.rest_hotels ***" % len(skipped))
     for nm in sorted(skipped):
