@@ -1,49 +1,68 @@
 ---
-name: rest-weekly-report
+name: rest
 description: >
-  Generate the weekly "Rest Results" Smoking Sensor Initiative report for Noble Investment Group's
-  Asset Management Team. Pulls live data from the rest. (NoiseAware) dashboard, builds the email-format
-  Excel sheet AND a paste-ready Word document (email body: greeting, Chosen model Capex/Financed lists,
-  per-property charged summary with exceptions, Best Practices, Portfolio Statistics, embedded table
-  picture, and Landon Watts' signature). ALSO runs the DAILY data refresh that keeps the hosted
-  extranet dashboard current. Trigger the weekly report when the user asks to "run the rest report",
-  "weekly rest email", "smoking sensor update", or names a report date like "rest as of 7/6". Trigger
-  the DAILY refresh (Mode A, data only, no documents) when the user asks to "refresh the rest data",
-  "refresh the rest dashboard", "update the rest site", "run the rest daily refresh", or when invoked
-  by a scheduled or automated task.
+  Rest (NoiseAware) smoking-sensor reporting for Noble Investment Group's Asset Management Team.
+  Refreshes the hosted extranet dashboard's data in Supabase and/or builds the weekly "Rest Results"
+  Word document (email body: greeting, Chosen model Capex/Financed lists, per-property charged
+  summary with exceptions, Best Practices, Portfolio Statistics, embedded table picture, and Landon
+  Watts' signature). Pulls live data from the rest. dashboard through the user's logged-in Chrome
+  session. Trigger on "/rest" (refresh AND document), "/rest A" (refresh only), "/rest B" (document
+  only), or when the user asks to "run the rest report", "weekly rest email", "smoking sensor
+  update", "refresh the rest data", "refresh the rest dashboard", "update the rest site", or names a
+  report date like "rest as of 7/6".
 ---
 
-# Rest Weekly Report
+# Rest
 
 Data always comes live from the rest. dashboard through the user's logged-in Chrome session.
 
-This skill has **two modes**. Decide which one you are in BEFORE doing anything else.
+## Read the argument FIRST
 
-| | **Mode A - Daily data refresh** | **Mode B - Weekly report** |
+The invocation decides what runs. Settle this BEFORE doing anything else.
+
+| Invoked as | Runs | Result |
 |---|---|---|
-| Purpose | Keep the hosted extranet dashboard current | Produce the paste-ready email **and** leave the dashboard current |
-| Steps to run | Step 1, then **Step 6b only** | Step 1, health check, **Step 6b**, then Steps 2-6, Step 7 |
-| Touches Supabase | **Yes** (overwrites `rest_monthly`) | **Yes** - it runs Mode A as part of the run |
+| **`/rest`** (no argument) | Mode A, **then** Mode B | Dashboard refreshed **and** `Rest<M-D>.docx` |
+| **`/rest A`** | Mode A only | Dashboard refreshed. **No documents, no prompts.** |
+| **`/rest B`** | Mode B only | `Rest<M-D>.docx` only. **Supabase untouched.** |
+
+Read the argument case-insensitively - `a`, `A`, `mode a` all mean Mode A. If the user asked in
+words instead of with a flag, work out which they meant and say which you picked before starting.
+When it is genuinely ambiguous, do the full `/rest`. There is **no scheduled run**; this skill is
+always invoked by hand.
+
+### The two modes
+
+| | **Mode A - data refresh** | **Mode B - weekly report** |
+|---|---|---|
+| Purpose | Keep the hosted extranet dashboard current | Produce the paste-ready email |
+| Steps to run | Step 1, health check, then **Step 6b only** | Step 1, health check, Steps 2-6, Step 7 |
+| Touches Supabase | **Yes** (overwrites `rest_monthly`) | **No** |
 | Produces files | **None** | **`Rest<M-D>.docx` only** |
 | Prompts the user | **No** (see Mode A rules) | Yes (see the input list below) |
 
-**The relationship runs one way: Mode B includes Mode A. Mode A never runs Mode B.** The nightly
-job must stay data-only - it must never generate documents.
+**Neither mode invokes the other.** A bare `/rest` runs both because the caller asked for both, in
+the order Mode A then Mode B - refresh first, so a broken session fails before any document work is
+wasted, and so the dashboard still ends up current even if the document build later goes wrong.
 
-**Mode A is the automated one.** It must be able to run unattended, so it never asks questions, and it must never produce documents.
+**`/rest B` deliberately does not refresh Supabase.** If it did, it would be identical to a bare
+`/rest`. Say in the closing message how stale the dashboard is, so an outstanding refresh is never
+a surprise.
+
 **Mode B produces the Word document only** - `Email.xlsx` is still built, but purely as an
 intermediate needed to render the table picture embedded in the Word doc. Do not present it.
 
-### Mode A rules (unattended daily refresh)
+### Mode A rules
 1. **Dates:** as-of = **today**, BEFORE = **tomorrow**. The dashboard is a MONTHLY view: it caps
    each month's room-night denominator at the as-of date, so an in-progress month is measured only
    against the days elapsed so far. Completed months are always exact, and a daily run simply
    recomputes the current month's row - it never adds history or a new period.
-   **Run late in the day (recommended ~11:45pm) so that "today" is essentially complete when it is
-   measured.** If the run happens early in the morning instead, today still counts as a full day in
-   the denominator while almost no events have been recorded yet, which understates the CURRENT
-   month's incident rate - badly in the first days of a month (roughly a third on the 3rd, ~8% by
-   the 10th, ~3% by month end). It never affects any completed month.
+   **The later in the day it runs, the truer the current month reads.** Today counts as a full day
+   in the denominator whatever time the run happens, so a morning run measures a nearly eventless
+   day against a whole day of room nights and understates the CURRENT month's incident rate - badly
+   in the first days of a month (roughly a third on the 3rd, ~8% by the 10th, ~3% by month end). It
+   never affects any completed month, so a morning run is fine; just do not read the current
+   month's rate as final.
 2. **Never prompt.** Hotel attributes come from `public.rest_hotels` in Supabase; use them as-is.
 3. **Report skipped hotels loudly.** Any hotel rest. returns that is missing from
    `public.rest_hotels` is skipped by the loader, which would quietly drop it from the dashboard.
@@ -52,29 +71,29 @@ intermediate needed to render the table picture embedded in the Word doc. Do not
 4. **If auth fails, stop and report.** Do not partially load. A failed token means no refresh
    happened; say so rather than reporting success.
 
-### Mode B order of operations
+### Order of operations for a bare `/rest`
 
 1. **Step 1** - connect and verify auth.
 2. **Health check** (below) - report what it surfaces before asking for anything.
-3. **Step 6b - the Mode A refresh.** Do this BEFORE building the report, for two reasons: if the
-   session is going to fail it fails early, and the dashboard ends up current even if the document
-   build later goes wrong.
+3. **Step 6b** - the Mode A refresh.
 4. **Steps 2-6** - the report pulls, the Excel intermediate, the table picture, the Word doc.
 5. **Step 7** - deliver the Word doc and report the refresh result.
 
-**The embedded refresh always uses as-of = TODAY, regardless of the report date the user gave.**
-This matters: someone running a back-dated weekly report ("rest as of 9/6") must not rewind the
-live dashboard to an older as-of and throw away newer data. The report and the dashboard are
-allowed to sit on different dates. If the report's as-of is not today, say so plainly in the
-closing message so nobody reads the difference as a bug.
+`/rest A` stops after step 3. `/rest B` skips step 3.
 
-### Mode B opens with a HEALTH CHECK (before prompting for anything)
-The nightly Mode A run reports into a session nobody reads at midnight, so the weekly run is
-the real checkpoint. Run these three through the Supabase MCP and report what they surface, in
-plain language, BEFORE asking for the report inputs.
+**Mode A always uses as-of = TODAY, regardless of the report date the user gave.** This matters:
+someone running a back-dated report ("rest as of 9/6") must not rewind the live dashboard to an
+older as-of and throw away newer data. The report and the dashboard are allowed to sit on different
+dates. If the report's as-of is not today, say so plainly in the closing message so nobody reads
+the difference as a bug.
+
+### Every run opens with a HEALTH CHECK (before prompting for anything)
+Nothing runs on a schedule any more, so this is the only moment problems surface - do not skip it,
+in either mode. Run these three through the Supabase MCP and report what they surface, in plain
+language, BEFORE asking for any report inputs.
 
 ```sql
--- 1. Is the dashboard current? (has the nightly refresh silently stopped?)
+-- 1. Is the dashboard current? (how long since the last refresh?)
 select max(as_of)::text as data_as_of, (current_date - max(as_of)) as days_old,
        count(*) as rows, sum(billable) as billable, sum(charged) as charged,
        round(sum(net_charges)::numeric,2) as collected
@@ -106,9 +125,9 @@ where m.model is distinct from r.model
    or m.rest_name is distinct from r.rest_name;
 ```
 
-Say plainly: how old the data is (call it out above 2 days - it means the nightly job is not
-running), every hotel from query 2, and every row from query 3. After the pull, also name any
-hotel rest. returned that is missing from `public.rest_hotels`. Do not bury these at the end.
+Say plainly: how old the data is (call it out above 2 days - it means nobody has run `/rest` or
+`/rest A` lately), every hotel from query 2, and every row from query 3. After the pull, also name
+any hotel rest. returned that is missing from `public.rest_hotels`. Do not bury these at the end.
 
 ### Changing a model, or adding a hotel
 `public.rest_hotels` is the source of truth, but the dashboard reads hotel attributes
@@ -214,7 +233,7 @@ node scripts/gen_doc.js data.json table.png "Rest<M-D>.docx"
 ```
 Validate with the docx skill's validate.py.
 
-## Step 6b — Refresh the live dashboard data (Supabase)  <== THIS IS THE DAILY JOB (Mode A)
+## Step 6b — Refresh the live dashboard data (Supabase)  <== THIS IS MODE A
 The dashboard is a hosted page on the Noble extranet (`dashboard.html`) that reads its data live from Supabase; each run OVERWRITES that data. Two extra browser pulls feed it (Monthly Indicators heatmap, Trends charts, Portfolio Dashboard financials). Both dump to a `<pre>` read via get_page_text (like Steps 2–3). Set BEFORE = day AFTER the as-of date (exclusive), e.g. as-of 2026-08-31 → `2026-09-01`.
 
 **Pull A — monthly billable/charged/net/rest per hotel** (rest cost via cumulative month-ends, diffed):
@@ -223,8 +242,8 @@ const tok=JSON.parse(localStorage.getItem('auth_token'));const H={Authorization:
 let props=[],pg=1;while(true){const j=await(await fetch('https://api.resteasy.noiseaware.com/client/properties/?pageSize=200&page='+pg+'&ordering=name',{headers:H})).json();(j.results||[]).forEach(p=>props.push({id:p.id,name:p.name}));if(j.next)pg++;else break;}
 const BEFORE='<BEFORE>';   // as-of + 1 day (exclusive upper bound)
 // MONTHS/ENDS are DERIVED from BEFORE, never hand-maintained: a hardcoded month list silently
-// drops the newest month the moment the calendar rolls into it, which an unattended daily run
-// would never notice. Series starts 2026-02 (first month with program data).
+// drops the newest month the moment the calendar rolls into it, silently and with no error.
+// Series starts 2026-02 (first month with program data).
 const ASOF=new Date(new Date(BEFORE+'T00:00:00Z').getTime()-86400000).toISOString().slice(0,10);
 const MONTHS=[];{let y=2026,m=2;const ey=+ASOF.slice(0,4),em=+ASOF.slice(5,7);
  while(y<ey||(y===ey&&m<=em)){MONTHS.push(y+'-'+String(m).padStart(2,'0'));m++;if(m>12){m=1;y++;}}}
@@ -295,8 +314,8 @@ This writes exactly **one** file, `./sql/rest_load_00.sql`: `delete from public.
 by the full monthly insert. Run that single file through the Supabase MCP `execute_sql`.
 
 **One file is deliberate.** One `execute_sql` call is one transaction, so the delete and the insert
-commit together and a reader can never catch the table empty or half-loaded. That is what makes an
-unattended nightly refresh safe. If the call fails, nothing changed - just re-run it.
+commit together and a reader can never catch the table empty or half-loaded. If the call fails,
+nothing changed - just re-run it.
 
 `load_supabase.py` also prints `TB`/`TC` (billable / charged derived from the daily pull) and a
 `*** HOTEL(S) SKIPPED ***` block for any hotel in the pull that is missing from `public.rest_hotels`.
@@ -304,7 +323,7 @@ It refuses to write a delete with no insert.
 
 This is an **overwrite** — no history is kept; each run replaces the full current series.
 **Refresh frequency does not change the data's shape.** `rest_monthly` holds one row per hotel per
-calendar month, so running nightly instead of weekly does NOT accumulate snapshots or versions — the
+calendar month, so running it daily instead of weekly does NOT accumulate snapshots or versions — the
 3 Sep run simply replaces what the 2 Sep run wrote, and September still has exactly one row per hotel.
 Row totals do still grow with time, by roughly 25 rows per calendar month. Monthly
 billable/charged/net are derived from the daily pull (kept exactly consistent); `rest_cost` comes from
@@ -332,18 +351,19 @@ from public.rest_monthly;
 
 ## Step 7 — Deliver
 
-**Mode B (weekly report):** surface **`Rest<M-D>.docx`** as a clickable card in the chat via
-`present_files`. That is the only deliverable. Then also report the embedded Mode A refresh: the
-as-of date loaded, the billable / charged / collected totals, and any skipped hotels - and if the
-report's as-of differs from the refresh's as-of, state both so the difference is not read as an
-error. `Email.xlsx` is an intermediate used to render the
+**Mode B (the report):** surface **`Rest<M-D>.docx`** as a clickable card in the chat via
+`present_files`. That is the only deliverable. `Email.xlsx` is an intermediate used to render the
 embedded table picture - do NOT present it; the user exports the spreadsheet themselves from the
-dashboard's Export to Excel button. Do not finish a Mode B run without presenting the Word doc.
+dashboard's Export to Excel button. Never finish a Mode B run without presenting the Word doc.
+On `/rest B`, close by saying the dashboard was NOT refreshed and how stale it is.
 
-**Mode A (daily refresh):** there are no files. Report in one short line: the as-of date loaded, the
-billable / charged / collected totals from the verification query, and any skipped hotels. Link
+**Mode A (the data refresh):** there are no files. Report in one short line: the as-of date loaded,
+the billable / charged / collected totals from the verification query, and any skipped hotels. Link
 `https://noble-extranet.vercel.app/rest-reporting.html`. If anything failed, say plainly that the
 refresh did not happen - never report a partial load as success.
+
+**A bare `/rest` reports both** - the refresh line first, then the Word doc. If the report's as-of
+differs from the refresh's as-of, state both so the difference is not read as an error.
 
 ## Definitions & rules (must stay consistent)
 - **Billable** = events eligible to charge; **Charged** = billable events where net collected > 0.
